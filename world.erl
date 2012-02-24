@@ -5,13 +5,16 @@
 
 start(WorldGlobals = #tp_world_globals{} ) ->
    WorldState = #worldstate{ is_tileframe_important=dict_tile_frame_important(),
-      world_data_table=ets:new(unused, [set, private, {read_concurrency, false}]),
       world_globals=WorldGlobals},
-   register( world, spawn( ?MODULE, world_loop, [WorldState] ) ).
+   register( world, spawn( ?MODULE, world_init, [WorldState] ) ).
+
+world_init( WorldState = #worldstate{} ) ->
+   WorldState1 = WorldState#worldstate{ world_data_table=ets:new(unused, [set, private, {read_concurrency, false}]) },
+   world_loop( WorldState1 ).
 
 world_loop( WorldState ) ->
    receive
-      {terpacket, 10, _} = SectionData ->
+      {terpacket, 10, SectionData } ->
          {{TotalLength, X, Y}, TileSections} = decode_section( WorldState, SectionData ),
          ok = update_world_section(WorldState#worldstate.world_data_table, X, Y, TotalLength, TileSections);
       Unknown ->
@@ -22,7 +25,9 @@ world_loop( WorldState ) ->
 
 update_world_section( WorldDataTable, X, Y, Left, [TileSection|T] ) ->
    Copies = TileSection#tile_section.copies,
-   [ ets:insert( WorldDataTable, { { X+Delta, Y }, TileSection#tile_section.tile} ) || Delta <- lists:seq( 0, Copies ) ],
+   lists:foreach( fun( Delta ) ->
+            ets:insert( WorldDataTable, { { X+Delta, Y }, TileSection#tile_section.tile} )
+      end, lists:seq( 0, Copies ) ),
    update_world_section( WorldDataTable, X + Copies + 1, Y, Left - (Copies + 1), T );
 
 update_world_section( _WorldDataTable, _X, _Y, Left, [] ) when Left =:= 0 ->
@@ -38,9 +43,9 @@ decode_section( WorldState=#worldstate{}, MetaData, TileSections, <<Active:1, Li
             DecodeFlags( WorldState, TileSection, Rest )
       end, { InitialTileSection, TileBinary } ,
       [ fun parse_flag_active/3, fun parse_flag_wall/3, fun parse_flag_liquid/3, fun parse_tile_length/3] ),
-   decode_section( MetaData, [TileSection|TileSections], Rest ).
+   decode_section( WorldState, MetaData, [TileSection|TileSections], Rest );
 
-decode_section( MetaData, Tiles, <<>> ) ->
+decode_section( _WorldState, MetaData, Tiles, <<>> ) ->
    {MetaData, lists:reverse(Tiles)}.
 
 parse_flag_active( WorldState, TileSection, Rest ) ->
@@ -54,7 +59,7 @@ parse_flag_active( WorldState, TileSection, Rest ) ->
                <<FrameX:16/little-signed, FrameY:16/little-signed, Rest2/binary>> = Rest1,
                { TileSection#tile_section.tile#tile{ type=Type, framex=FrameX, framey=FrameY }, Rest2 }
          end;
-      true ->
+      _ ->
          {TileSection, Rest}
    end.
 
@@ -63,7 +68,7 @@ parse_flag_wall( _WorldState, TileSection, Rest ) ->
       #tile{ flag_wall=1 } ->
          <<Wall:8, Rest1/binary>> = Rest,
          { TileSection#tile_section.tile#tile{ wall=Wall }, Rest1 };
-      true ->
+      _ ->
          {TileSection, Rest}
    end.
 
@@ -72,13 +77,13 @@ parse_flag_liquid( _WorldState, TileSection, Rest ) ->
       #tile{ flag_liquid=1 } ->
          <<Liquid:8, IsLava:8, Rest1/binary>> = Rest,
          { TileSection#tile_section.tile#tile{ liquid=Liquid, lava=IsLava }, Rest1 };
-      true ->
+      _ ->
          {TileSection, Rest}
    end.
 
 parse_tile_length( _WorldState, TileSection, Rest ) ->
-   <<Copies:16/little-signed, Rest1>> = Rest,
-   { TileSection#tile_section{ copies = Copies }, Rest1 }.
+   <<Copies:16/little-signed, Rest1/binary>> = Rest,
+   { TileSection#tile_section{ copies=Copies }, Rest1 }.
 
 is_tileframe_important( TileId, DictTileImportant ) ->
    case dict:find( TileId, DictTileImportant ) of

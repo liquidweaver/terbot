@@ -19,7 +19,8 @@ login() ->
    terproto:send( packet_player_life( Player ) ),
    terproto:send( packet_player_mana( Player ) ),
    terproto:send( packet_player_buff( Player ) ),
-   lists:foreach( fun( { Item, N } ) -> terproto:send( packet_inventory_item( Player, N, Item ) ) end,
+   lists:foreach( fun( { Item, N } ) ->
+            terproto:send( packet_inventory_item( Player, N, Item ) ) end,
       lists:zip( Player#player.inventory, lists:seq( 0, 59 ) ) ),
    terproto:send( packet_contine_connecting() ),
    {terpacket, 7, WorldDataBin} = terproto:recv( 7 ),
@@ -31,6 +32,9 @@ login() ->
 
 router_loop() ->
    receive
+      {terpacket, 9, StatusUpdate} ->
+         <<Number:32/little-signed, String/binary>> = StatusUpdate,
+         io:format( "[StatusUpdate] Number:~p String:~s~n", [Number, String] );   
       {terpacket, 10, _} = TileSectionUpdate ->
          world ! TileSectionUpdate;
       {terpacket, 23, _} = NpcUpdatePacket ->
@@ -40,7 +44,7 @@ router_loop() ->
       {terpacket, 60, _} = NpcNameUpdate ->
          npc ! NpcNameUpdate;
       {terpacket, N, Data} ->
-         io:format( "Received Uknown terpacket [Type:~p, Data:~p]~n", [N, Data] )
+         io:format( "Received Unknown terpacket [Type:~p, Data:~p]~n", [N, Data] )
    end,
    router_loop().
 

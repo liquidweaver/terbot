@@ -8,6 +8,7 @@
 start() ->
    Sock = connect(),
    ProtoPid = spawn_link( ?MODULE, terproto_loop, [ self(), Sock, <<>> ] ),
+   register( ?MODULE, ProtoPid ),
    ok = gen_tcp:controlling_process( Sock, ProtoPid ).
 
 
