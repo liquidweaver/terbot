@@ -15,6 +15,7 @@ world_init( WorldState = #worldstate{} ) ->
 world_loop( WorldState ) ->
    receive
       {terpacket, 10, SectionData } ->
+         %io:format( "[SectionData] ~p~n", [SectionData] ),
          {{TotalLength, X, Y}, TileSections} = decode_section( WorldState, SectionData ),
          ok = update_world_section(WorldState#worldstate.world_data_table, X, Y, TotalLength, TileSections);
       Unknown ->
@@ -36,7 +37,7 @@ update_world_section( _WorldDataTable, _X, _Y, Left, [] ) when Left =:= 0 ->
 decode_section( WorldState=#worldstate{}, <<TotalLength:16/little-signed, X:32/little-signed, Y:32/little-signed, TileData/binary>> ) ->
    decode_section( WorldState, {TotalLength, X, Y}, [], TileData ).
 
-decode_section( WorldState=#worldstate{}, MetaData, TileSections, <<Active:1, Lighted:1,Wall:1, Liquid:1, Wire:1, _Unused:3, TileBinary/binary>> ) ->
+decode_section( WorldState=#worldstate{}, MetaData, TileSections, <<_Unused:3, Wire:1, Liquid:1, Wall:1, Lighted:1, Active:1, TileBinary/binary>> ) ->
    InitialTile = #tile{ flag_active=Active, flag_lighted=Lighted, flag_wall=Wall, flag_liquid=Liquid, flag_wire=Wire},
    InitialTileSection = #tile_section{ tile=InitialTile }, 
    {TileSection, Rest} = lists:foldl( fun( DecodeFlags, {TileSection, Rest}  ) ->
@@ -48,40 +49,44 @@ decode_section( WorldState=#worldstate{}, MetaData, TileSections, <<Active:1, Li
 decode_section( _WorldState, MetaData, Tiles, <<>> ) ->
    {MetaData, lists:reverse(Tiles)}.
 
-parse_flag_active( WorldState, TileSection, Rest ) ->
+parse_flag_active( WorldState, TileSection = #tile_section{}, Rest ) ->
    case TileSection#tile_section.tile of
       #tile{ flag_active=1 } ->
          <<Type:8, Rest1/binary>> = Rest,
-         case is_tileframe_important( WorldState, Type ) of
+         case is_tileframe_important( Type, WorldState#worldstate.is_tileframe_important) of
             false ->
-               { TileSection#tile_section.tile#tile{type=Type}, Rest1 };
+               NewTile = TileSection#tile_section.tile#tile{type=Type}, 
+               { TileSection#tile_section{ tile = NewTile}, Rest1 };
             true ->
                <<FrameX:16/little-signed, FrameY:16/little-signed, Rest2/binary>> = Rest1,
-               { TileSection#tile_section.tile#tile{ type=Type, framex=FrameX, framey=FrameY }, Rest2 }
+               NewTile = TileSection#tile_section.tile#tile{ type=Type, framex=FrameX, framey=FrameY },
+               { TileSection#tile_section{ tile = NewTile}, Rest2 }
          end;
       _ ->
          {TileSection, Rest}
    end.
 
-parse_flag_wall( _WorldState, TileSection, Rest ) ->
+parse_flag_wall( _WorldState, TileSection = #tile_section{}, Rest ) ->
    case TileSection#tile_section.tile of
       #tile{ flag_wall=1 } ->
          <<Wall:8, Rest1/binary>> = Rest,
-         { TileSection#tile_section.tile#tile{ wall=Wall }, Rest1 };
+         NewTile = TileSection#tile_section.tile#tile{wall=Wall}, 
+         { TileSection#tile_section{ tile = NewTile}, Rest1 };
       _ ->
          {TileSection, Rest}
    end.
 
-parse_flag_liquid( _WorldState, TileSection, Rest ) ->
+parse_flag_liquid( _WorldState, TileSection = #tile_section{}, Rest ) ->
    case TileSection#tile_section.tile of
       #tile{ flag_liquid=1 } ->
          <<Liquid:8, IsLava:8, Rest1/binary>> = Rest,
-         { TileSection#tile_section.tile#tile{ liquid=Liquid, lava=IsLava }, Rest1 };
+         NewTile = TileSection#tile_section.tile#tile{ liquid=Liquid, lava=IsLava },
+         { TileSection#tile_section{ tile = NewTile}, Rest1 };
       _ ->
          {TileSection, Rest}
    end.
 
-parse_tile_length( _WorldState, TileSection, Rest ) ->
+parse_tile_length( _WorldState, TileSection = #tile_section{}, Rest ) ->
    <<Copies:16/little-signed, Rest1/binary>> = Rest,
    { TileSection#tile_section{ copies=Copies }, Rest1 }.
 
@@ -113,4 +118,6 @@ dict_tile_frame_important() ->
          { 106, true}, { 110, true}, { 113, true}, { 114, true},
          { 125, true}, { 126, true}, { 128, true}, { 129, true},
          { 132, true}, { 133, true}, { 134, true}, { 135, true},
-         { 141, true} ] ).
+         { 136, true }, { 137, true }, { 138, true },{ 139, true },
+         { 141, true}, { 142, true }, { 143, true }, { 144, true },
+         { 149, true }] ).

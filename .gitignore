@@ -1,2 +1,4 @@
 *.beam
 *.dump
+*.swp
+ttb_last_config
