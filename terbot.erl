@@ -4,6 +4,7 @@
 -import( terpacket ).
 -import( terproto ).
 -include( "player.hrl" ).
+-include( "terpacket.hrl" ).
 -define( VERSION, "39" ).
 
 start() ->
@@ -23,15 +24,21 @@ login() ->
             terproto:send( packet_inventory_item( Player, N, Item ) ) end,
       lists:zip( Player#player.inventory, lists:seq( 0, 59 ) ) ),
    terproto:send( packet_contine_connecting() ),
-   {terpacket, 7, WorldDataBin} = terproto:recv( 7 ),
-   WorldData = terpacket:terpacket_to_record( {terpacket, 7, WorldDataBin} ), 
-   world:start( WorldData ),
+   WorldGlobals = terpacket:terpacket_to_record( terproto:recv(7) ),
+   player:notify_spawn( WorldGlobals#tp_world_globals.spawnx,
+                        WorldGlobals#tp_world_globals.spawny ),
+   world:start( WorldGlobals ),
+   npc:start(),
    terproto:send( packet_get_section( -1, -1 ) ),
    terproto:recv( 49 ), %%OK to spawn in
+   Player1 = player:get_player(), %Would be nice if there was a better option
+   terproto:send( packet_spawn_player( Player1 ) ),
    router_loop().
 
 router_loop() ->
    receive
+      {terpacket, 2, FatalError} ->
+         erlang:error( FatalError ); 
       {terpacket, 9, StatusUpdate} ->
          <<Number:32/little-signed, String/binary>> = StatusUpdate,
          io:format( "[StatusUpdate] Number:~p String:~s~n", [Number, String] );   
@@ -41,8 +48,10 @@ router_loop() ->
          npc ! NpcUpdatePacket;
       {terpacket, 48, _} = LiquidUpdate ->
          world ! LiquidUpdate;
-      {terpacket, 60, _} = NpcNameUpdate ->
+      {terpacket, 56, _} = NpcNameUpdate ->
          npc ! NpcNameUpdate;
+      {terpacket, 60, _} = NpcHomeInfo ->
+         npc ! NpcHomeInfo;
       {terpacket, N, Data} ->
          io:format( "Received Unknown terpacket [Type:~p, Data:~p]~n", [N, Data] )
    end,
@@ -64,6 +73,9 @@ packet_player_info( #player{} = Player ) ->
          Player#player.shirt_rgb, Player#player.undershirt_rgb,
          Player#player.pants_rgb, Player#player.shoe_rgb,
          <<(Player#player.difficulty):8>>, Player#player.name] }.
+
+packet_spawn_player( #player{ id=ID, positionx=X, positiony=Y } ) ->
+   {terpacket, 12, <<ID:8, X:32/little-signed, Y:32/little-signed>> }.
 
 packet_player_life( #player{ id=ID, current_life=Life, max_life=Maxlife } ) ->
    {terpacket, 16, [ <<ID:8>>, <<Life:16/little-signed>>, <<Maxlife:16/little-signed>> ] }.

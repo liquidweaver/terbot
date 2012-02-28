@@ -17,7 +17,16 @@ npc_loop( Npcs ) ->
          NameUpdate = terpacket:terpacket_to_record( NpcNamePacket ),
          io:format( "npc: tossed npc name update (ID:~p,Name:~p)~n", [ NameUpdate#tp_update_npc_name.npcid, NameUpdate#tp_update_npc_name.name ] ),
          npc_loop( Npcs );
+      {terpacket, 60, _} = NpcHomeInfoPacket ->
+         HomeInfoUpdate = terpacket:terpacket_to_record( NpcHomeInfoPacket ),
+         io:format( "npc: tossed home into update (ID:~p,TileX:~p,TileY:~p,Homeless:~p)~n",
+               [ HomeInfoUpdate#tp_npc_home_info_update.npcid,
+                 HomeInfoUpdate#tp_npc_home_info_update.hometilex,
+                 HomeInfoUpdate#tp_npc_home_info_update.hometiley,
+                 HomeInfoUpdate#tp_npc_home_info_update.homeless ] ),
+         npc_loop( Npcs );
       Unknown ->
-         io:format( "npc: Unknown packet: ~p~n", [Unknown] )
+         io:format( "npc: Unknown packet: ~p~n", [Unknown] ),
+         npc_loop( Npcs )
    end.
 

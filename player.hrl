@@ -16,7 +16,9 @@
       current_life=60,
       max_life=60,
       current_mana=0,
-      max_mana=0
+      max_mana=0,
+      positionx=0,
+      positiony=0
    }).
 
 -record( item, { id=0, stack=0, prefix=0 } ).
